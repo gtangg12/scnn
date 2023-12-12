@@ -95,7 +95,7 @@ def render_modelnet40_distances(filename: Path | str, output: Path | str):
     return distances
 
 
-def render_images(mesh: Mesh, ncount=64):
+def render_images(mesh: Mesh, ncount=256):
     """
     Render images at random angles distance 2 from the center of the mesh
     """
@@ -108,6 +108,7 @@ def render_images(mesh: Mesh, ncount=64):
 
     scene = mesh.scene()
     images = []
+    poses  = []
     for i in range(ncount):
         camera_position = random_point_on_sphere(2.5)
         camera_transform = trimesh.geometry.align_vectors([0, 0, 1], camera_position)
@@ -116,7 +117,8 @@ def render_images(mesh: Mesh, ncount=64):
         image = scene.save_image(resolution=(128, 128), visible=True)
         image = Image.open(BytesIO(image))
         images.append(image)
-    return images
+        poses.append(camera_transform)
+    return images, poses
     
 
 def render_modelnet40_images(filename: Path | str, output: Path | str):
@@ -125,11 +127,12 @@ def render_modelnet40_images(filename: Path | str, output: Path | str):
     print('Rendering ', filename)
     mesh = trimesh.load_mesh(filename)
     mesh = normalize_mesh(mesh)
-    images = render_images(mesh)
+    images, poses = render_images(mesh)
     print('Done rendering ', filename)
-    for i, image in enumerate(images):
+    for i, (image, pose) in enumerate(zip(images, poses)):
         image.save(f'{output}/{Path(filename.name).stem}_{i:04d}.png')
-    return images
+        np.save(f'{output}/{Path(filename.name).stem}_{i:04d}.npy', pose)
+    return images, poses
 
 
 def render_modelnet40(render_func: callable, path: Path | str, output: Path| str, partition='train'):
@@ -176,4 +179,4 @@ if __name__ == "__main__":
     #images[0].show()
     #exit()
     #render_modelnet40(render_modelnet40_distances, '/home/gtangg12/data/ModelNet40_aligned/', '/home/gtangg12/data/scnn/s2', partition='train')
-    render_modelnet40(render_modelnet40_images, '/home/gtangg12/data/ModelNet40_aligned', '/home/gtangg12/data/scnn/images_test', partition='test')
+    render_modelnet40(render_modelnet40_images, '/home/gtangg12/data/ModelNet40_aligned', '/home/gtangg12/data/scnn/images_posed', partition='train')

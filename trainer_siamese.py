@@ -83,10 +83,10 @@ class TripletLoss(nn.Module):
 class TripletDataset(EncoderClassifierDataset):
     """
     """
-    def __init__(self, path_images: Path | str, path_features: Path | str, nimages: int = 64, partition='train'):
+    def __init__(self, path_images: Path | str, path_features: Path | str, nimages: int = 256, partition='train'):
         """
         """
-        npartition = 64
+        npartition = 256
         self.n = npartition if partition == 'train' else (nimages - npartition)
 
         transforms_image = torchvision.transforms.Compose([
@@ -168,7 +168,7 @@ class LitSiamese(lightning.LightningModule):
 def train():
     """
     """
-    dataset = TripletDataset('/home/gtangg12/data/scnn/images', '/home/gtangg12/data/scnn/scnn_features')
+    dataset = TripletDataset('/home/gtangg12/data/scnn/images_posed', '/home/gtangg12/data/scnn/scnn_features')
     ntrain = int(0.8 * len(dataset))
     train_dataset, validation_dataset = torch.utils.data.random_split(dataset, [
         ntrain, len(dataset) - ntrain

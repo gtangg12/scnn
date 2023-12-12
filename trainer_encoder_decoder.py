@@ -11,6 +11,39 @@ from tqdm import tqdm
 from PIL import Image
 
 from modules.spherical_encoder_decoder import EncoderDecoder
+from modules.spherical_functional import sphrot_shtools
+
+
+from mayavi import mlab
+from renderer import generate_equiangular_rays
+from PIL import Image
+
+def plot_mayavi(f, n: int):
+    directions = generate_equiangular_rays(n)
+    mlab.mesh(
+        directions[:, :, 0], 
+        directions[:, :, 1], 
+        directions[:, :, 2], scalars=f, colormap='coolwarm'
+    )
+    mlab.show()
+
+
+def cam2world_to_zyz_euler_angles(matrix):
+    """
+    Convert a camera-to-world matrix to ZYZ Euler angles.
+
+    :param matrix: A 4x4 camera-to-world transformation matrix
+    :return: A tuple of ZYZ Euler angles in radians
+    """
+    # Extracting the rotation matrix R from the transformation matrix
+    R = matrix[:3, :3]
+
+    # Calculating ZYZ Euler angles from the rotation matrix
+    theta_1 = np.arctan2(R[1, 0], R[0, 0])
+    theta_2 = np.arctan2(np.sqrt(R[0, 2]**2 + R[1, 2]**2), R[2, 2])
+    theta_3 = np.arctan2(R[2, 1], -R[2, 0])
+
+    return torch.tensor([theta_1, theta_2, theta_3])
 
 
 class EmbeddingLoss(nn.Module):
@@ -35,7 +68,7 @@ class EmbeddingLoss(nn.Module):
 class EncoderDecoderDataset(torch.utils.data.Dataset):
     """
     """
-    def __init__(self, path_images: Path | str, path_features: Path | str, nimages: int = 64, partition='train'):
+    def __init__(self, path_images: Path | str, path_features: Path | str, nimages: int = 256, partition='train'):
         """
         """
         npartition = int(0.75 * nimages)
@@ -48,7 +81,7 @@ class EncoderDecoderDataset(torch.utils.data.Dataset):
         ])
         self.nimages = nimages
         self.filenames_images_unpartitioned = sorted(glob.glob(f'{path_images  }/*.png'))
-        self.filenames_features             = sorted(glob.glob(f'{path_features}/*.npy'))[:10]
+        self.filenames_features             = sorted(glob.glob(f'{path_features}/*.npy'))
         self.filenames_images               = []
         for i in range(len(self.filenames_features)):
             index = i * nimages
@@ -59,11 +92,22 @@ class EncoderDecoderDataset(torch.utils.data.Dataset):
         self.images   = []
         self.features = []
         for i, filename in tqdm(enumerate(self.filenames_features)):
-            self.features.append(torch.from_numpy(np.load(filename)))
             for j in range(self.n):
+                fname = self.filenames_images[i * self.n + j]
+                pname = fname.replace('.png', '.npy')
+                pose = np.load(pname)
                 self.images.append(transforms_image(
-                    Image.open(self.filenames_images[i * self.n + j]).convert('L')
+                    Image.open(fname).convert('L')
                 ))
+                features = torch.from_numpy(np.load(filename))
+                features = torch.stack([
+                    torch.from_numpy(
+                        sphrot_shtools(f, cam2world_to_zyz_euler_angles(pose))
+                     ) for f in features
+                ])
+                self.features.append(
+                    features.float()
+                )
 
     def __len__(self):
         return len(self.images)
@@ -96,39 +140,25 @@ class LitEncoderDecoder(lightning.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=2e-4, weight_decay=1e-5)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
         return {
             'optimizer': optimizer, 'lr_scheduler': scheduler, 'monitor': 'val_loss'
         }
     
 
-from mayavi import mlab
-from renderer import generate_equiangular_rays
-from PIL import Image
-
-def plot_mayavi(f, n: int):
-    directions = generate_equiangular_rays(n)
-    mlab.mesh(
-        directions[:, :, 0], 
-        directions[:, :, 1], 
-        directions[:, :, 2], scalars=f, colormap='coolwarm'
-    )
-    mlab.show()
-
-
 def train():
     """
     """
     autoencoder = LitEncoderDecoder()
-    dataset = EncoderDecoderDataset('/home/gtangg12/data/scnn/images', '/home/gtangg12/data/scnn/scnn_features')
+    dataset = EncoderDecoderDataset('/home/gtangg12/data/scnn/images_posed', '/home/gtangg12/data/scnn/scnn_features')
     ntrain = int(0.8 * len(dataset))
     train_dataset, validation_dataset = torch.utils.data.random_split(dataset, [
         ntrain, len(dataset) - ntrain
     ])
     train_loader, validation_loader = \
-        torch.utils.data.DataLoader(train_dataset     , batch_size=16, shuffle=True),\
-        torch.utils.data.DataLoader(validation_dataset, batch_size=16, shuffle=False)
+        torch.utils.data.DataLoader(train_dataset     , batch_size=32, shuffle=True),\
+        torch.utils.data.DataLoader(validation_dataset, batch_size=32, shuffle=False)
     '''
     for i, (x, y) in enumerate(dataset):
         print(x.shape, y.shape)

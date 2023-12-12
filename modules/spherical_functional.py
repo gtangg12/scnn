@@ -107,7 +107,7 @@ def magl_pool(fc: Complex[torch.Tensor, "b c l m"]) -> Complex[torch.Tensor, "b 
 
 
 
-def sphrot_shtools(f: Float[torch.Tensor, "n n"], x: Float[torch.Tensor, "3"], lmax=None, latcols=True) -> Float[torch.Tensor, "n n"]:
+def sphrot_shtools(f: Float[torch.Tensor, "n n"], x: Float[torch.Tensor, "3"], lmax=None, latcols=False) -> Float[torch.Tensor, "n n"]:
     """ 
     Rotate function on sphere f by Euler angles x (Z-Y-Z convention)
     """
